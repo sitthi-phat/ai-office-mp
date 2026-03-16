@@ -119,16 +119,18 @@ export async function runChief(chiefId, user, userMessage, imageUrl = null) {
         if (sysKeywords.test(step.instruction)) {
           const info = getSystemInfo()
           await writeMemory(user.memoryFile, { last_task: userMessage })
-          stepResults[step.step] = [
-            `## System Resource Report`,
-            `**CPU:** ${info.cpu.model} (${info.cpu.cores} cores)`,
-            `**CPU Usage:** ${info.cpu.usedPct}%  |  Load avg (1m): ${info.cpu.loadAvg1}`,
-            `**RAM Total:** ${info.memory.totalGB} GB`,
-            `**RAM Used:** ${info.memory.usedGB} GB (${info.memory.usedPct}%)`,
-            `**RAM Free:** ${info.memory.freeGB} GB (${(100 - info.memory.usedPct).toFixed(1)}%)`,
-            `**Uptime:** ${info.uptime}`,
-            `**Platform:** ${info.platform}  |  Host: ${info.hostname}`
-          ].join('\n')
+          stepResults[step.step] = {
+            type: 'admin',
+            text: [
+              `CPU: ${info.cpu.model} (${info.cpu.cores} cores)`,
+              `CPU Usage: ${info.cpu.usedPct}%  |  Load avg (1m): ${info.cpu.loadAvg1}`,
+              `RAM Total: ${info.memory.totalGB} GB`,
+              `RAM Used:  ${info.memory.usedGB} GB (${info.memory.usedPct}%)`,
+              `RAM Free:  ${info.memory.freeGB} GB (${(100 - info.memory.usedPct).toFixed(1)}%)`,
+              `Uptime:    ${info.uptime}`,
+              `Platform:  ${info.platform}  |  Host: ${info.hostname}`
+            ].join('\n')
+          }
         } else {
           await writeMemory(user.memoryFile, { last_task: userMessage })
           stepResults[step.step] = 'memory updated'
@@ -157,7 +159,7 @@ export async function runChief(chiefId, user, userMessage, imageUrl = null) {
   const lastStep = plan.plan[plan.plan.length - 1]
   const finalOutput = stepResults[lastStep.step]
   // Pass plain text to QA (not the full object) for accurate review
-  const qaInput = finalOutput?.fullText ?? finalOutput
+  const qaInput = finalOutput?.fullText ?? finalOutput?.text ?? finalOutput
   const qa = await review(lastStep.specialist, qaInput)
   emitLog(user.id, 'qa', `QA: ${qa.passed ? 'PASS' : 'FAIL'} — ${qa.feedback}`)
 
