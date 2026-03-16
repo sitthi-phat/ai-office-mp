@@ -122,7 +122,7 @@ export async function runChief(chiefId, user, userMessage, imageUrl = null) {
           stepResults[step.step] = {
             type: 'admin',
             text: [
-              `CPU: ${info.cpu.model} (${info.cpu.cores} cores)`,
+              `CPU: ${info.cpu.model} (${info.cpu.cores} logical processors)`,
               `CPU Usage: ${info.cpu.usedPct}%  |  Load avg (1m): ${info.cpu.loadAvg1}`,
               `RAM Total: ${info.memory.totalGB} GB`,
               `RAM Used:  ${info.memory.usedGB} GB (${info.memory.usedPct}%)`,
