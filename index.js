@@ -1,72 +1,55 @@
 import express from 'express'
 import dotenv from 'dotenv'
-import { getUserByPhone } from './config/users.js'
+import { USERS } from './config/users.js'
 import { enqueue } from './dispatcher.js'
-import { sendText, sendImage } from './utils/whatsapp.js'
 
 dotenv.config()
 const app = express()
 app.use(express.json())
 
-app.get('/webhook', (req, res) => {
-  const mode      = req.query['hub.mode']
-  const token     = req.query['hub.verify_token']
-  const challenge = req.query['hub.challenge']
-  if (mode === 'subscribe' && token === process.env.WHATSAPP_VERIFY_TOKEN) {
-    console.log('Webhook verified')
-    return res.status(200).send(challenge)
-  }
-  res.sendStatus(403)
+// GET /api/users — ดู user ที่มีในระบบ
+app.get('/api/users', (_req, res) => {
+  const users = Object.values(USERS).map(u => ({ id: u.id, name: u.name, chief: u.chief }))
+  res.json({ users })
 })
 
-app.post('/webhook', async (req, res) => {
-  res.sendStatus(200)
-  const entry = req.body?.entry?.[0]?.changes?.[0]?.value
-  if (!entry?.messages) return
-  const msg  = entry.messages[0]
-  const from = msg.from
-  const user = getUserByPhone(from)
-  if (!user) return
+// POST /api/message — ส่งข้อความเข้าระบบ
+// Body: { userId: "user_a" | "user_b", message: "...", imageUrl: "..." (optional) }
+app.post('/api/message', async (req, res) => {
+  const { userId, message, imageUrl = null } = req.body
 
-  let text = '', imageUrl = null
-  if (msg.type === 'text') {
-    text = msg.text.body
-  } else if (msg.type === 'image') {
-    text     = msg.image?.caption || 'วิเคราะห์รูปนี้ให้หน่อย'
-    imageUrl = await fetchMediaUrl(msg.image.id)
-  } else {
-    await sendText(from, 'ขออภัยครับ รองรับเฉพาะข้อความและรูปภาพครับ')
-    return
+  if (!userId || !message) {
+    return res.status(400).json({ error: 'userId and message are required' })
   }
 
-  console.log(`[Chief ${user.chief}] ${user.name}: ${text}`)
+  const user = Object.values(USERS).find(u => u.id === userId)
+  if (!user) {
+    return res.status(404).json({ error: `User "${userId}" not found` })
+  }
 
-  enqueue(user, text, imageUrl, async (result) => {
-    await sendText(from, result.reply)
-    if (result.specialist === 'DESIGNER' && Array.isArray(result.finalOutput)) {
-      for (const img of result.finalOutput) {
-        await sendImage(from, img.url, `ขนาด ${img.label}`)
-      }
-    }
-    if (result.qa && !result.qa.passed) {
-      await sendText(from, `หมายเหตุ QA: ${result.qa.feedback}`)
-    }
+  console.log(`[Chief ${user.chief}] ${user.name}: ${message}`)
+
+  enqueue(user, message, imageUrl, (result) => {
     console.log(`Done [Chief ${user.chief}] QA: ${result.qa?.passed ? 'PASS' : 'FAIL'}`)
+  })
+
+  // ส่ง result กลับตรงๆ (synchronous wait)
+  const result = await new Promise((resolve) => {
+    enqueue(user, message, imageUrl, resolve)
+  })
+
+  res.json({
+    reply:      result.reply,
+    specialist: result.specialist,
+    output:     result.finalOutput,
+    qa:         result.qa
   })
 })
 
-async function fetchMediaUrl(mediaId) {
-  const res = await fetch(
-    `https://graph.facebook.com/v19.0/${mediaId}`,
-    { headers: { Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}` } }
-  )
-  const data = await res.json()
-  return data.url
-}
-
 const PORT = process.env.PORT || 3000
 app.listen(PORT, () => {
-  console.log(`AI Office running on port ${PORT}`)
-  console.log(`User A: ${process.env.USER_A_NAME}`)
-  console.log(`User B: ${process.env.USER_B_NAME}`)
+  console.log(`AI Office API running on port ${PORT}`)
+  console.log(`Endpoints:`)
+  console.log(`  GET  http://localhost:${PORT}/api/users`)
+  console.log(`  POST http://localhost:${PORT}/api/message`)
 })
