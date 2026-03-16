@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk'
-import { readMemory, formatMemoryForPrompt, writeMemory } from '../specialists/admin.js'
+import { readMemory, formatMemoryForPrompt, writeMemory, getSystemInfo } from '../specialists/admin.js'
 import { research } from '../specialists/researcher.js'
 import { write } from '../specialists/writer.js'
 import { generateImages, analyzeImage } from '../specialists/designer.js'
@@ -29,7 +29,7 @@ Do NOT do specialist work yourself. Plan, delegate, summarize.
 - DESIGNER     → image generation (DALL·E 3) or image analysis
 - RESEARCHER   → search and summarize from the internet  
 - WRITER       → write articles, captions, translations
-- ADMIN        → update user memory/preferences
+- ADMIN        → update user memory/preferences OR report system CPU/RAM/resource usage
 
 # ROUTING RULES
 - When in doubt → make best guess and proceed
@@ -114,10 +114,27 @@ export async function runChief(chiefId, user, userMessage, imageUrl = null) {
         }
         break
 
-      case 'ADMIN':
-        await writeMemory(user.memoryFile, { last_task: userMessage })
-        stepResults[step.step] = 'memory updated'
+      case 'ADMIN': {
+        const sysKeywords = /cpu|ram|memory|mem|system|resource|usage|available/i
+        if (sysKeywords.test(step.instruction)) {
+          const info = getSystemInfo()
+          await writeMemory(user.memoryFile, { last_task: userMessage })
+          stepResults[step.step] = [
+            `## System Resource Report`,
+            `**CPU:** ${info.cpu.model} (${info.cpu.cores} cores)`,
+            `**CPU Usage:** ${info.cpu.usedPct}%  |  Load avg (1m): ${info.cpu.loadAvg1}`,
+            `**RAM Total:** ${info.memory.totalGB} GB`,
+            `**RAM Used:** ${info.memory.usedGB} GB (${info.memory.usedPct}%)`,
+            `**RAM Free:** ${info.memory.freeGB} GB (${(100 - info.memory.usedPct).toFixed(1)}%)`,
+            `**Uptime:** ${info.uptime}`,
+            `**Platform:** ${info.platform}  |  Host: ${info.hostname}`
+          ].join('\n')
+        } else {
+          await writeMemory(user.memoryFile, { last_task: userMessage })
+          stepResults[step.step] = 'memory updated'
+        }
         break
+      }
 
       default:
         stepResults[step.step] = `unknown specialist: ${step.specialist}`
