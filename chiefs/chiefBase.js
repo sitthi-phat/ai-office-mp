@@ -124,7 +124,19 @@ export async function runChief(chiefId, user, userMessage, imageUrl = null) {
     }
   }
 
-  // 4. QA
+  // 4. Handle empty plan (Chief replied directly, no specialist needed)
+  if (plan.plan.length === 0) {
+    await writeMemory(user.memoryFile, { last_task: userMessage })
+    return {
+      reply: plan.reply_to_user,
+      results: {},
+      finalOutput: null,
+      qa: { passed: true, feedback: 'PASS — direct reply, no specialist needed' },
+      specialist: null
+    }
+  }
+
+  // 5. QA
   const lastStep = plan.plan[plan.plan.length - 1]
   const finalOutput = stepResults[lastStep.step]
   // Pass plain text to QA (not the full object) for accurate review
@@ -132,7 +144,7 @@ export async function runChief(chiefId, user, userMessage, imageUrl = null) {
   const qa = await review(lastStep.specialist, qaInput)
   emitLog(user.id, 'qa', `QA: ${qa.passed ? 'PASS' : 'FAIL'} — ${qa.feedback}`)
 
-  // 5. อัพเดท last_task ใน memory
+  // 6. อัพเดท last_task ใน memory
   await writeMemory(user.memoryFile, { last_task: userMessage })
 
   return {
