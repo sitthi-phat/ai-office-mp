@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Office</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #f0f2f5;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Header ── */
+    #header {
+      background: #1a1a2e;
+      color: #fff;
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+    #header h1 { font-size: 18px; font-weight: 600; letter-spacing: 0.5px; }
+    #header span { font-size: 12px; color: #888; }
+    #log-toggle {
+      background: #16213e;
+      color: #7ec8e3;
+      border: 1px solid #7ec8e3;
+      padding: 5px 14px;
+      border-radius: 20px;
+      cursor: pointer;
+      font-size: 13px;
+      transition: background 0.2s;
+    }
+    #log-toggle:hover { background: #0f3460; }
+
+    /* ── Main layout ── */
+    #main { display: flex; flex: 1; overflow: hidden; }
+
+    /* ── Chat panel ── */
+    #chat-panel {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      min-width: 0;
+      min-height: 0;
+    }
+
+    /* ── Tabs ── */
+    #tabs {
+      display: flex;
+      background: #fff;
+      border-bottom: 2px solid #e0e0e0;
+      flex-shrink: 0;
+    }
+    .tab-btn {
+      padding: 12px 28px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      color: #666;
+      border: none;
+      background: transparent;
+      border-bottom: 3px solid transparent;
+      margin-bottom: -2px;
+      transition: all 0.15s;
+    }
+    .tab-btn:hover { color: #333; background: #f5f5f5; }
+    .tab-btn.active { color: #1a1a2e; border-bottom-color: #7ec8e3; }
+    .tab-indicator {
+      display: inline-block;
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      margin-right: 7px;
+    }
+    .tab-A .tab-indicator { background: #7ec8e3; }
+    .tab-B .tab-indicator { background: #f4a261; }
+
+    /* ── Date bar ── */
+    #date-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 16px;
+      background: #f8f9fa;
+      border-bottom: 1px solid #e0e0e0;
+      flex-shrink: 0;
+    }
+    #date-bar > span:first-child { font-size: 13px; }
+    #date-select {
+      font-size: 13px;
+      padding: 4px 10px;
+      border: 1px solid #ddd;
+      border-radius: 16px;
+      background: #fff;
+      color: #333;
+      cursor: pointer;
+      outline: none;
+      max-width: 240px;
+    }
+    #date-select:focus { border-color: #7ec8e3; }
+    .today-badge {
+      font-size: 11px; padding: 2px 8px;
+      background: #e8f5e9; color: #2e7d32;
+      border-radius: 10px; font-weight: 600;
+    }
+    .past-badge {
+      font-size: 11px; padding: 2px 8px;
+      background: #fff3e0; color: #e65100;
+      border-radius: 10px;
+    }
+
+    /* ── Chat views ── */
+    #chat-views {
+      display: flex;
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
+    }
+    .chat-view { display: none; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; }
+    .chat-view.active { display: flex; }
+
+    /* ── Messages ── */
+    .messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .date-divider {
+      text-align: center;
+      font-size: 11px;
+      color: #aaa;
+      margin: 4px 0 8px;
+    }
+
+    .bubble-row { display: flex; align-items: flex-end; gap: 8px; }
+    .bubble-row.user { flex-direction: row-reverse; }
+
+    .avatar {
+      width: 30px; height: 30px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px; font-weight: 600; flex-shrink: 0;
+    }
+    .avatar-ai { background: #1a1a2e; color: #7ec8e3; }
+    .avatar-user-a { background: #7ec8e3; color: #fff; }
+    .avatar-user-b { background: #f4a261; color: #fff; }
+
+    .bubble {
+      max-width: 68%; padding: 10px 14px; border-radius: 18px;
+      font-size: 14px; line-height: 1.5; word-break: break-word; white-space: pre-wrap;
+    }
+    .bubble-row.ai .bubble {
+      background: #fff; color: #222;
+      border-bottom-left-radius: 4px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+    .bubble-row.user .bubble { color: #fff; border-bottom-right-radius: 4px; }
+    .bubble-row.user.chief-A .bubble { background: #0b93f6; }
+    .bubble-row.user.chief-B .bubble { background: #e07b39; }
+
+    .bubble .output-images { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
+    .output-image-wrap { display: flex; flex-direction: column; gap: 4px; }
+    .output-image-wrap .img-label { font-size: 11px; color: rgba(255,255,255,0.6); font-weight: 600; }
+    .bubble-row.ai .output-image-wrap .img-label { color: #888; }
+    .output-images img {
+      max-width: 100%; border-radius: 10px; display: block;
+      cursor: pointer; transition: opacity 0.15s;
+    }
+    .output-images img:hover { opacity: 0.9; }
+
+    .qa-badge {
+      display: inline-block; font-size: 11px; padding: 2px 8px;
+      border-radius: 10px; margin-top: 6px;
+    }
+    .qa-pass { background: #d4edda; color: #155724; }
+    .qa-fail { background: #f8d7da; color: #721c24; }
+
+    .ts { font-size: 10px; color: #aaa; margin: 0 4px 2px; }
+
+    .typing {
+      display: flex; align-items: center; gap: 4px;
+      padding: 10px 14px; background: #fff;
+      border-radius: 18px; border-bottom-left-radius: 4px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08); width: fit-content;
+    }
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: #aaa; animation: bounce 1.2s infinite; }
+    .dot:nth-child(2) { animation-delay: 0.2s; }
+    .dot:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes bounce { 0%,80%,100% { transform: translateY(0); } 40% { transform: translateY(-6px); } }
+
+    /* ── Input ── */
+    .input-row {
+      display: flex; padding: 14px 16px; gap: 10px;
+      background: #fff; border-top: 1px solid #e0e0e0; flex-shrink: 0;
+    }
+    .input-row textarea {
+      flex: 1; resize: none; border: 1px solid #ddd; border-radius: 22px;
+      padding: 10px 16px; font-size: 14px; font-family: inherit;
+      outline: none; max-height: 100px; line-height: 1.4; transition: border 0.15s;
+    }
+    .input-row textarea:focus { border-color: #7ec8e3; }
+    .input-row textarea:disabled { background: #f5f5f5; color: #aaa; cursor: not-allowed; }
+    .send-btn {
+      width: 42px; height: 42px; border-radius: 50%; border: none; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; flex-shrink: 0; transition: opacity 0.15s; align-self: flex-end;
+    }
+    .send-btn:hover { opacity: 0.85; }
+    .send-btn-A { background: #0b93f6; color: #fff; }
+    .send-btn-B { background: #e07b39; color: #fff; }
+    .send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* ── Log panel ── */
+    #log-panel {
+      width: 320px; flex-shrink: 0; background: #1a1a2e;
+      display: flex; flex-direction: column;
+      transition: width 0.25s ease; overflow: hidden;
+    }
+    #log-panel.hidden { width: 0; }
+    #log-header {
+      padding: 12px 16px; color: #7ec8e3; font-size: 13px; font-weight: 600;
+      border-bottom: 1px solid #2a2a4e; flex-shrink: 0;
+      display: flex; align-items: center; gap: 8px;
+    }
+    #log-header .dot-live {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: #4caf50; animation: pulse 1.5s infinite;
+    }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+    #log-clear { margin-left: auto; background: none; border: none; color: #555; cursor: pointer; font-size: 12px; }
+    #log-clear:hover { color: #888; }
+    #log-list { flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 4px; }
+    .log-entry {
+      font-size: 12px; padding: 5px 8px; border-radius: 6px;
+      line-height: 1.4; color: #ccc; background: #16213e; word-break: break-word;
+    }
+    .log-entry .log-time { color: #555; font-size: 10px; margin-right: 5px; }
+    .log-entry .log-user { font-size: 10px; font-weight: 600; margin-right: 4px; }
+    .log-user-a { color: #7ec8e3; }
+    .log-user-b { color: #f4a261; }
+    .log-entry.log-queue  { border-left: 3px solid #555; }
+    .log-entry.log-plan   { border-left: 3px solid #7ec8e3; color: #b0d8e8; }
+    .log-entry.log-step   { border-left: 3px solid #a78bfa; color: #c4b5fd; }
+    .log-entry.log-qa.pass{ border-left: 3px solid #4caf50; color: #a5d6a7; }
+    .log-entry.log-qa.fail{ border-left: 3px solid #ef5350; color: #ef9a9a; }
+    .log-entry.log-done   { border-left: 3px solid #4caf50; color: #a5d6a7; }
+    .log-entry.log-error  { border-left: 3px solid #ef5350; color: #ef9a9a; }
+    .log-icon { margin-right: 4px; }
+
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #ddd; border-radius: 3px; }
+    #log-list::-webkit-scrollbar-thumb { background: #2a2a4e; }
+  </style>
+</head>
+<body>
+
+<div id="header">
+  <h1>AI Office</h1>
+  <span id="status-text">connecting...</span>
+  <button id="log-toggle">Logs</button>
+</div>
+
+<div id="main">
+  <div id="chat-panel">
+    <div id="tabs"></div>
+
+    <div id="date-bar">
+      <span>📅</span>
+      <select id="date-select"><option value="">Loading...</option></select>
+      <span id="date-badge" class="today-badge">Live</span>
+    </div>
+
+    <div id="chat-views"></div>
+  </div>
+
+  <div id="log-panel">
+    <div id="log-header">
+      <div class="dot-live"></div>
+      Specialist Log
+      <button id="log-clear">clear</button>
+    </div>
+    <div id="log-list"></div>
+  </div>
+</div>
+
+<script>
+const LOG_ICONS = { queue:'📋', plan:'🧠', step:'⚙️', qa:'🔍', done:'✅', error:'❌' }
+
+function getToday() {
+  return new Date().toISOString().split('T')[0]
+}
+
+function formatDateLabel(dateStr) {
+  const today = getToday()
+  const d = new Date(dateStr + 'T00:00:00')
+  const label = d.toLocaleDateString(undefined, { year:'numeric', month:'short', day:'numeric' })
+  return dateStr === today ? `Today — ${label}` : label
+}
+
+// ── State ──────────────────────────────────────────
+const state = {
+  activeUserId: null,
+  selectedDate: getToday(),
+  users: [],
+  sending: {}
+}
+
+// ── Boot ───────────────────────────────────────────
+async function init() {
+  const res  = await fetch('/api/users')
+  const data = await res.json()
+  state.users = data.users
+  state.users.forEach(u => { state.sending[u.id] = false })
+
+  buildTabs()
+  openSSE()
+  document.getElementById('status-text').textContent = 'online'
+  await switchTab(state.users[0].id)
+}
+
+// ── Tabs ───────────────────────────────────────────
+function buildTabs() {
+  const tabsEl  = document.getElementById('tabs')
+  const viewsEl = document.getElementById('chat-views')
+
+  state.users.forEach(u => {
+    const btn = document.createElement('button')
+    btn.className = `tab-btn tab-${u.chief}`
+    btn.id        = `tab-btn-${u.id}`
+    btn.innerHTML = `<span class="tab-indicator"></span>${u.name} (Chief ${u.chief})`
+    btn.onclick   = () => switchTab(u.id)
+    tabsEl.appendChild(btn)
+
+    const view = document.createElement('div')
+    view.className = 'chat-view'
+    view.id        = `view-${u.id}`
+    view.innerHTML = `
+      <div class="messages" id="msgs-${u.id}"></div>
+      <div class="input-row">
+        <textarea id="input-${u.id}" placeholder="Message ${u.name}..." rows="1"></textarea>
+        <button class="send-btn send-btn-${u.chief}" id="send-${u.id}" onclick="sendMsg('${u.id}')">➤</button>
+      </div>`
+    viewsEl.appendChild(view)
+
+    setTimeout(() => {
+      const ta = document.getElementById(`input-${u.id}`)
+      ta.addEventListener('keydown', e => {
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMsg(u.id) }
+      })
+      ta.addEventListener('input', () => {
+        ta.style.height = 'auto'
+        ta.style.height = Math.min(ta.scrollHeight, 100) + 'px'
+      })
+    }, 0)
+  })
+}
+
+async function switchTab(userId) {
+  state.activeUserId = userId
+  state.users.forEach(u => {
+    document.getElementById(`tab-btn-${u.id}`)?.classList.toggle('active', u.id === userId)
+    document.getElementById(`view-${u.id}`)?.classList.toggle('active', u.id === userId)
+  })
+  await loadDates(userId)
+  await loadHistory(userId, state.selectedDate)
+}
+
+// ── Date picker ────────────────────────────────────
+async function loadDates(userId) {
+  const res   = await fetch(`/api/history/${userId}/dates`)
+  const data  = await res.json()
+  const today = getToday()
+  const sel   = document.getElementById('date-select')
+
+  // Always include today at top
+  const dates = data.dates.includes(today) ? data.dates : [today, ...data.dates]
+
+  sel.innerHTML = dates
+    .map(d => `<option value="${d}">${formatDateLabel(d)}</option>`)
+    .join('')
+
+  // Keep current selected date if still valid, otherwise default to today
+  if (dates.includes(state.selectedDate)) {
+    sel.value = state.selectedDate
+  } else {
+    sel.value = today
+    state.selectedDate = today
+  }
+}
+
+document.getElementById('date-select').addEventListener('change', async (e) => {
+  state.selectedDate = e.target.value
+  updateDateBadge()
+  if (state.activeUserId) await loadHistory(state.activeUserId, state.selectedDate)
+})
+
+function updateDateBadge() {
+  const badge   = document.getElementById('date-badge')
+  const isToday = state.selectedDate === getToday()
+  badge.className   = isToday ? 'today-badge' : 'past-badge'
+  badge.textContent = isToday ? 'Live' : 'Read-only'
+}
+
+async function loadHistory(userId, date) {
+  const res  = await fetch(`/api/history/${userId}?date=${date}`)
+  const data = await res.json()
+
+  const msgs    = document.getElementById(`msgs-${userId}`)
+  const ta      = document.getElementById(`input-${userId}`)
+  const btn     = document.getElementById(`send-${userId}`)
+  const isToday = date === getToday()
+  const user    = state.users.find(u => u.id === userId)
+
+  msgs.innerHTML = ''
+  ta.disabled    = !isToday
+  btn.disabled   = !isToday
+  ta.placeholder = isToday
+    ? `Message ${user?.name}...`
+    : 'Read-only — switch to Today to send messages'
+
+  updateDateBadge()
+
+  if (data.messages.length === 0) {
+    const empty = document.createElement('div')
+    empty.className   = 'date-divider'
+    empty.textContent = isToday ? 'No messages yet today' : 'No messages on this date'
+    msgs.appendChild(empty)
+    return
+  }
+
+  const divider = document.createElement('div')
+  divider.className   = 'date-divider'
+  divider.textContent = formatDateLabel(date)
+  msgs.appendChild(divider)
+
+  data.messages.forEach(m => {
+    renderBubble(userId, m.role, m.text, m.output, m.qa, user.chief, m.ts)
+  })
+  msgs.scrollTop = msgs.scrollHeight
+}
+
+// ── Send message ───────────────────────────────────
+async function sendMsg(userId) {
+  if (state.sending[userId]) return
+  if (state.selectedDate !== getToday()) return
+
+  const ta   = document.getElementById(`input-${userId}`)
+  const btn  = document.getElementById(`send-${userId}`)
+  const text = ta.value.trim()
+  if (!text) return
+
+  ta.value = ''; ta.style.height = 'auto'
+  state.sending[userId] = true
+  btn.disabled = true
+
+  const user = state.users.find(u => u.id === userId)
+  renderBubble(userId, 'user', text, null, null, user.chief, Date.now())
+
+  const typingId = appendTyping(userId)
+
+  try {
+    const res  = await fetch('/api/message', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ userId, message: text })
+    })
+    const data = await res.json()
+    removeTyping(typingId)
+    renderBubble(userId, 'ai', data.reply, data.output, data.qa, user.chief, Date.now())
+
+    // Refresh date list in case today was just created
+    await loadDates(userId)
+  } catch (err) {
+    removeTyping(typingId)
+    renderBubble(userId, 'ai', '❌ Error: ' + err.message, null, null, user.chief, Date.now())
+  }
+
+  state.sending[userId] = false
+  btn.disabled = false
+  document.getElementById(`input-${userId}`)?.focus()
+}
+
+// ── Bubble renderer ────────────────────────────────
+function renderBubble(userId, role, text, output, qa, chief, ts) {
+  const msgs = document.getElementById(`msgs-${userId}`)
+  const time = ts
+    ? new Date(ts).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' })
+    : '--:--'
+
+  const row = document.createElement('div')
+  row.className = `bubble-row ${role}${role === 'user' ? ` chief-${chief}` : ''}`
+
+  const avatarEl = document.createElement('div')
+  avatarEl.className   = `avatar ${role === 'ai' ? 'avatar-ai' : `avatar-user-${chief.toLowerCase()}`}`
+  avatarEl.textContent = role === 'ai' ? 'AI' : chief
+
+  const bubbleEl = document.createElement('div')
+  bubbleEl.className   = 'bubble'
+  bubbleEl.textContent = text || ''
+
+  // Images
+  if (output && Array.isArray(output) && output[0]?.url) {
+    const imgs = document.createElement('div')
+    imgs.className = 'output-images'
+    output.forEach(img => {
+      const wrap = document.createElement('div')
+      wrap.className = 'output-image-wrap'
+      const lbl = document.createElement('div')
+      lbl.className   = 'img-label'
+      lbl.textContent = `📐 ${img.label || ''}`
+      const im = document.createElement('img')
+      im.src    = img.url
+      im.alt    = img.label || 'image'
+      im.onclick = () => window.open(img.url, '_blank')
+      wrap.append(lbl, im)
+      imgs.appendChild(wrap)
+    })
+    bubbleEl.appendChild(imgs)
+  }
+
+  // QA badge
+  if (qa) {
+    const badge = document.createElement('div')
+    badge.className   = `qa-badge ${qa.passed ? 'qa-pass' : 'qa-fail'}`
+    badge.textContent = `QA: ${qa.passed ? 'PASS' : 'FAIL'} — ${qa.feedback || ''}`
+    bubbleEl.appendChild(badge)
+  }
+
+  row.append(avatarEl, bubbleEl)
+
+  const tsEl = document.createElement('div')
+  tsEl.className   = 'ts'
+  tsEl.textContent = time
+
+  const wrap = document.createElement('div')
+  wrap.style.cssText = `display:flex;flex-direction:column;align-items:${role === 'user' ? 'flex-end' : 'flex-start'}`
+  wrap.append(row, tsEl)
+  msgs.appendChild(wrap)
+  msgs.scrollTop = msgs.scrollHeight
+}
+
+function appendTyping(userId) {
+  const msgs = document.getElementById(`msgs-${userId}`)
+  const id   = 'typing-' + Date.now()
+  const row  = document.createElement('div')
+  row.className = 'bubble-row ai'; row.id = id
+  row.innerHTML = `<div class="avatar avatar-ai">AI</div>
+    <div class="typing"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>`
+  msgs.appendChild(row)
+  msgs.scrollTop = msgs.scrollHeight
+  return id
+}
+
+function removeTyping(id) { document.getElementById(id)?.remove() }
+
+// ── SSE Log stream ──────────────────────────────────
+function openSSE() {
+  const es = new EventSource('/api/logs')
+  es.onmessage = e => appendLog(JSON.parse(e.data))
+  es.onerror   = () => { document.getElementById('status-text').textContent = 'reconnecting...' }
+  es.onopen    = () => { document.getElementById('status-text').textContent = 'online' }
+}
+
+function appendLog(ev) {
+  const list = document.getElementById('log-list')
+  const user = state.users.find(u => u.id === ev.userId)
+  const time = new Date(ev.ts).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit', second:'2-digit' })
+  const isQaPass = ev.type === 'qa' && ev.message.includes('PASS')
+  const isQaFail = ev.type === 'qa' && ev.message.includes('FAIL')
+  const el = document.createElement('div')
+  el.className = `log-entry log-${ev.type}${isQaPass ? ' pass' : isQaFail ? ' fail' : ''}`
+  el.innerHTML = `<span class="log-time">${time}</span>
+    <span class="log-user log-user-${ev.userId?.split('_')[1]}">${user?.name || ev.userId}</span>
+    <span class="log-icon">${LOG_ICONS[ev.type] || '•'}</span>${escHtml(ev.message)}`
+  list.appendChild(el)
+  list.scrollTop = list.scrollHeight
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+}
+
+// ── Controls ────────────────────────────────────────
+document.getElementById('log-toggle').onclick = () => {
+  document.getElementById('log-panel').classList.toggle('hidden')
+}
+document.getElementById('log-clear').onclick = () => {
+  document.getElementById('log-list').innerHTML = ''
+}
+
+init()
+</script>
+</body>
+</html>

@@ -4,6 +4,7 @@ import { research } from '../specialists/researcher.js'
 import { write } from '../specialists/writer.js'
 import { generateImages, analyzeImage } from '../specialists/designer.js'
 import { review } from '../specialists/qa.js'
+import { emitLog } from '../utils/logEmitter.js'
 
 const client = new Anthropic()
 
@@ -71,8 +72,9 @@ export async function runChief(chiefId, user, userMessage, imageUrl = null) {
 
   let plan
   try {
-    const raw = planResponse.content[0].text
+    const raw = planResponse.content[0].text.replace(/^```json\s*/i, '').replace(/```\s*$/, '').trim()
     plan = JSON.parse(raw)
+    emitLog(user.id, 'plan', `Plan: ${plan.plan.length} step(s), confidence=${plan.confidence}`)
   } catch {
     // Chief ตอบ plain text (กรณี simple conversation)
     return {
@@ -92,7 +94,7 @@ export async function runChief(chiefId, user, userMessage, imageUrl = null) {
       ? stepResults[step.depends_on_step]
       : null
 
-    console.log(`  → Step ${step.step}: ${step.specialist}`)
+    emitLog(user.id, 'step', `Step ${step.step}: ${step.specialist} — ${step.instruction}`)
 
     switch (step.specialist) {
       case 'RESEARCHER':
@@ -125,6 +127,7 @@ export async function runChief(chiefId, user, userMessage, imageUrl = null) {
   const lastStep = plan.plan[plan.plan.length - 1]
   const finalOutput = stepResults[lastStep.step]
   const qa = await review(lastStep.specialist, finalOutput)
+  emitLog(user.id, 'qa', `QA: ${qa.passed ? 'PASS' : 'FAIL'} — ${qa.feedback}`)
 
   // 5. อัพเดท last_task ใน memory
   await writeMemory(user.memoryFile, { last_task: userMessage })
