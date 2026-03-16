@@ -1,0 +1,15 @@
+# Dependencies
+node_modules/
+
+# Environment (contains API keys — never commit)
+.env
+
+# Claude Code internals
+.claude/
+
+# Runtime-generated content (optional: remove lines below to track these)
+history/
+memory/
+public/uploads/
+public/results/
+public/images/
