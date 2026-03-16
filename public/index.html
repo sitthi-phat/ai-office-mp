@@ -177,6 +177,33 @@
     }
     .output-images img:hover { opacity: 0.9; }
 
+    .research-output {
+      margin-top: 10px;
+      background: #f0f4f8;
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 12px;
+      color: #333;
+    }
+    .bubble-row.user .research-output { background: rgba(255,255,255,0.15); color: #fff; }
+    .research-preview {
+      white-space: pre-wrap;
+      line-height: 1.6;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+    }
+    .research-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      margin-top: 8px;
+      font-size: 12px;
+      color: #0b93f6;
+      text-decoration: none;
+      font-weight: 500;
+    }
+    .research-link:hover { text-decoration: underline; }
+
     .qa-badge {
       display: inline-block; font-size: 11px; padding: 2px 8px;
       border-radius: 10px; margin-top: 6px;
@@ -198,10 +225,39 @@
     @keyframes bounce { 0%,80%,100% { transform: translateY(0); } 40% { transform: translateY(-6px); } }
 
     /* ── Input ── */
-    .input-row {
-      display: flex; padding: 14px 16px; gap: 10px;
+    .input-area {
       background: #fff; border-top: 1px solid #e0e0e0; flex-shrink: 0;
     }
+    .image-preview-bar {
+      display: none;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 16px 0;
+    }
+    .image-preview-bar.visible { display: flex; }
+    .image-preview-bar img {
+      width: 56px; height: 56px;
+      object-fit: cover; border-radius: 8px;
+      border: 2px solid #e0e0e0;
+    }
+    .remove-image-btn {
+      background: #ef5350; color: #fff; border: none;
+      border-radius: 50%; width: 20px; height: 20px;
+      font-size: 12px; cursor: pointer; line-height: 1;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .preview-label { font-size: 11px; color: #888; }
+    .input-row {
+      display: flex; padding: 10px 16px 14px; gap: 10px;
+    }
+    .attach-btn {
+      width: 38px; height: 38px; border-radius: 50%; border: 1px solid #ddd;
+      background: #f5f5f5; cursor: pointer; font-size: 18px;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; align-self: flex-end; transition: background 0.15s;
+    }
+    .attach-btn:hover { background: #e8e8e8; }
+    .attach-btn:disabled { opacity: 0.4; cursor: not-allowed; }
     .input-row textarea {
       flex: 1; resize: none; border: 1px solid #ddd; border-radius: 22px;
       padding: 10px 16px; font-size: 14px; font-family: inherit;
@@ -218,6 +274,13 @@
     .send-btn-A { background: #0b93f6; color: #fff; }
     .send-btn-B { background: #e07b39; color: #fff; }
     .send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* user bubble image attachment */
+    .bubble-attached-img {
+      max-width: 100%; border-radius: 10px; display: block;
+      margin-top: 6px; cursor: pointer;
+    }
+    .bubble-attached-img:hover { opacity: 0.9; }
 
     /* ── Log panel ── */
     #log-panel {
@@ -312,7 +375,8 @@ const state = {
   activeUserId: null,
   selectedDate: getToday(),
   users: [],
-  sending: {}
+  sending: {},
+  pendingImage: {}   // { userId: { dataUrl, uploadedUrl } | null }
 }
 
 // ── Boot ───────────────────────────────────────────
@@ -346,9 +410,21 @@ function buildTabs() {
     view.id        = `view-${u.id}`
     view.innerHTML = `
       <div class="messages" id="msgs-${u.id}"></div>
-      <div class="input-row">
-        <textarea id="input-${u.id}" placeholder="Message ${u.name}..." rows="1"></textarea>
-        <button class="send-btn send-btn-${u.chief}" id="send-${u.id}" onclick="sendMsg('${u.id}')">➤</button>
+      <div class="input-area">
+        <div class="image-preview-bar" id="preview-bar-${u.id}">
+          <img id="preview-img-${u.id}" src="" alt="preview">
+          <div>
+            <div class="preview-label">Image attached</div>
+            <button class="remove-image-btn" onclick="clearImagePreview('${u.id}')">✕</button>
+          </div>
+        </div>
+        <div class="input-row">
+          <input type="file" id="file-input-${u.id}" accept=".jpg,.jpeg,.png" style="display:none"
+            onchange="handleFileSelect('${u.id}', this.files[0])">
+          <button class="attach-btn" id="attach-btn-${u.id}" onclick="triggerFileInput('${u.id}')" title="Attach image">📎</button>
+          <textarea id="input-${u.id}" placeholder="Message ${u.name}..." rows="1"></textarea>
+          <button class="send-btn send-btn-${u.chief}" id="send-${u.id}" onclick="sendMsg('${u.id}')">➤</button>
+        </div>
       </div>`
     viewsEl.appendChild(view)
 
@@ -415,15 +491,17 @@ async function loadHistory(userId, date) {
   const res  = await fetch(`/api/history/${userId}?date=${date}`)
   const data = await res.json()
 
-  const msgs    = document.getElementById(`msgs-${userId}`)
-  const ta      = document.getElementById(`input-${userId}`)
-  const btn     = document.getElementById(`send-${userId}`)
-  const isToday = date === getToday()
-  const user    = state.users.find(u => u.id === userId)
+  const msgs       = document.getElementById(`msgs-${userId}`)
+  const ta         = document.getElementById(`input-${userId}`)
+  const btn        = document.getElementById(`send-${userId}`)
+  const attachBtn  = document.getElementById(`attach-btn-${userId}`)
+  const isToday    = date === getToday()
+  const user       = state.users.find(u => u.id === userId)
 
   msgs.innerHTML = ''
-  ta.disabled    = !isToday
-  btn.disabled   = !isToday
+  ta.disabled         = !isToday
+  btn.disabled        = !isToday
+  if (attachBtn) attachBtn.disabled = !isToday
   ta.placeholder = isToday
     ? `Message ${user?.name}...`
     : 'Read-only — switch to Today to send messages'
@@ -463,8 +541,12 @@ async function sendMsg(userId) {
   state.sending[userId] = true
   btn.disabled = true
 
-  const user = state.users.find(u => u.id === userId)
-  renderBubble(userId, 'user', text, null, null, user.chief, Date.now())
+  const user      = state.users.find(u => u.id === userId)
+  const pending   = state.pendingImage[userId]
+  const imageUrl  = pending?.uploadedUrl ?? null
+
+  renderBubble(userId, 'user', text, null, null, user.chief, Date.now(), pending?.dataUrl ?? null)
+  clearImagePreview(userId)
 
   const typingId = appendTyping(userId)
 
@@ -472,7 +554,7 @@ async function sendMsg(userId) {
     const res  = await fetch('/api/message', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ userId, message: text })
+      body:    JSON.stringify({ userId, message: text, imageUrl })
     })
     const data = await res.json()
     removeTyping(typingId)
@@ -491,7 +573,7 @@ async function sendMsg(userId) {
 }
 
 // ── Bubble renderer ────────────────────────────────
-function renderBubble(userId, role, text, output, qa, chief, ts) {
+function renderBubble(userId, role, text, output, qa, chief, ts, attachedImageDataUrl = null) {
   const msgs = document.getElementById(`msgs-${userId}`)
   const time = ts
     ? new Date(ts).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' })
@@ -507,6 +589,33 @@ function renderBubble(userId, role, text, output, qa, chief, ts) {
   const bubbleEl = document.createElement('div')
   bubbleEl.className   = 'bubble'
   bubbleEl.textContent = text || ''
+
+  // Attached image (user bubble)
+  if (attachedImageDataUrl) {
+    const img = document.createElement('img')
+    img.src       = attachedImageDataUrl
+    img.className = 'bubble-attached-img'
+    img.alt       = 'attached'
+    img.onclick   = () => window.open(attachedImageDataUrl, '_blank')
+    bubbleEl.appendChild(img)
+  }
+
+  // Research / Writer output — preview + link
+  if (output && (output.type === 'research' || output.type === 'writer')) {
+    const isWriter = output.type === 'writer'
+    const box = document.createElement('div')
+    box.className = 'research-output'
+    const pre = document.createElement('div')
+    pre.className   = 'research-preview'
+    pre.textContent = output.preview || ''
+    const link = document.createElement('a')
+    link.className   = 'research-link'
+    link.href        = output.url
+    link.target      = '_blank'
+    link.textContent = isWriter ? '📝 View full content' : '📄 View full report'
+    box.append(pre, link)
+    bubbleEl.appendChild(box)
+  }
 
   // Images
   if (output && Array.isArray(output) && output[0]?.url) {
@@ -588,6 +697,51 @@ function appendLog(ev) {
 
 function escHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+}
+
+// ── Image upload ────────────────────────────────────
+function triggerFileInput(userId) {
+  document.getElementById(`file-input-${userId}`)?.click()
+}
+
+function handleFileSelect(userId, file) {
+  if (!file) return
+  const reader = new FileReader()
+  reader.onload = async (e) => {
+    const dataUrl = e.target.result
+
+    // Upload to server
+    try {
+      const res = await fetch('/api/upload', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ filename: file.name, data: dataUrl })
+      })
+      const data = await res.json()
+      if (data.error) { alert('Upload failed: ' + data.error); return }
+
+      state.pendingImage[userId] = { dataUrl, uploadedUrl: data.url }
+
+      // Show preview bar
+      const bar = document.getElementById(`preview-bar-${userId}`)
+      const img = document.getElementById(`preview-img-${userId}`)
+      img.src = dataUrl
+      bar.classList.add('visible')
+    } catch (err) {
+      alert('Upload error: ' + err.message)
+    }
+  }
+  reader.readAsDataURL(file)
+  // Reset file input so same file can be re-selected
+  document.getElementById(`file-input-${userId}`).value = ''
+}
+
+function clearImagePreview(userId) {
+  state.pendingImage[userId] = null
+  const bar = document.getElementById(`preview-bar-${userId}`)
+  const img = document.getElementById(`preview-img-${userId}`)
+  if (bar) bar.classList.remove('visible')
+  if (img) img.src = ''
 }
 
 // ── Controls ────────────────────────────────────────

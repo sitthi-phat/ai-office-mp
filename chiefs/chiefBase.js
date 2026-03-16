@@ -5,6 +5,7 @@ import { write } from '../specialists/writer.js'
 import { generateImages, analyzeImage } from '../specialists/designer.js'
 import { review } from '../specialists/qa.js'
 import { emitLog } from '../utils/logEmitter.js'
+import { resolveImageSource } from '../utils/imageHelper.js'
 
 const client = new Anthropic()
 
@@ -56,11 +57,9 @@ export async function runChief(chiefId, user, userMessage, imageUrl = null) {
   const memoryText = formatMemoryForPrompt(memory)
 
   // 2. Chief วางแผน
-  const messageContent = imageUrl
-    ? [
-        { type: 'image', source: { type: 'url', url: imageUrl } },
-        { type: 'text', text: userMessage }
-      ]
+  const imgSource = resolveImageSource(imageUrl)
+  const messageContent = imgSource
+    ? [{ type: 'image', source: imgSource }, { type: 'text', text: userMessage }]
     : userMessage
 
   const planResponse = await client.messages.create({
@@ -98,12 +97,14 @@ export async function runChief(chiefId, user, userMessage, imageUrl = null) {
 
     switch (step.specialist) {
       case 'RESEARCHER':
-        stepResults[step.step] = await research(step.instruction)
+        stepResults[step.step] = await research(step.instruction, imageUrl)
         break
 
-      case 'WRITER':
-        stepResults[step.step] = await write(step.instruction, prevOutput)
+      case 'WRITER': {
+        const writerContext = prevOutput?.fullText ?? prevOutput
+        stepResults[step.step] = await write(step.instruction, writerContext, imageUrl)
         break
+      }
 
       case 'DESIGNER':
         if (imageUrl) {
@@ -126,7 +127,9 @@ export async function runChief(chiefId, user, userMessage, imageUrl = null) {
   // 4. QA
   const lastStep = plan.plan[plan.plan.length - 1]
   const finalOutput = stepResults[lastStep.step]
-  const qa = await review(lastStep.specialist, finalOutput)
+  // Pass plain text to QA (not the full object) for accurate review
+  const qaInput = finalOutput?.fullText ?? finalOutput
+  const qa = await review(lastStep.specialist, qaInput)
   emitLog(user.id, 'qa', `QA: ${qa.passed ? 'PASS' : 'FAIL'} — ${qa.feedback}`)
 
   // 5. อัพเดท last_task ใน memory

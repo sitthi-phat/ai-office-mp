@@ -40,9 +40,12 @@ User (Browser Chat UI)
 - **Specialist Chaining** — e.g. RESEARCHER → WRITER for research-then-write tasks
 - **QA Gate** — every output is reviewed by QA before returning to user
 - **Image Generation** — DALL·E 3 generates 2 sizes (1:1 and 16:9), saved locally to `public/images/`
+- **Image Upload** — attach `.jpg`/`.png` to any message; all specialists can view and analyze the image
+- **Research Output** — saved as `.txt` to `public/results/`, first 10 lines shown in chat with link to full report
+- **Writer Output** — same as researcher: `.txt` saved, preview + link in chat
 - **Real-time Logs** — SSE stream shows specialist steps live in the chat UI sidebar
 - **Chat History** — all conversations persisted to `history/{userId}/YYYY-MM-DD.json`
-- **Date Picker** — browse past conversations by date, latest on top
+- **Date Picker** — browse past conversations by date, latest on top (read-only for past dates)
 
 ---
 
@@ -64,12 +67,14 @@ User (Browser Chat UI)
 ├── utils/
 │   ├── logEmitter.js         # EventEmitter for real-time SSE log broadcast
 │   ├── historyStore.js       # File-based chat history (per user, per date)
-│   └── whatsapp.js           # WhatsApp API client (reserved for future use)
+│   └── imageHelper.js        # resolveImageSource — converts local uploads to base64 for Claude API
 ├── config/
-│   └── users.js              # User registry (phone → user object)
+│   └── users.js              # User registry (userId → user object)
 ├── public/
-│   ├── index.html            # Chat web UI (vanilla JS, SSE, date picker)
-│   └── images/               # Generated images stored here
+│   ├── index.html            # Chat web UI (vanilla JS, SSE, date picker, image upload)
+│   ├── images/               # DALL·E generated images stored here
+│   ├── uploads/              # User-uploaded images stored here
+│   └── results/              # Research/writer output .txt files stored here
 ├── memory/
 │   ├── user_a.json           # Persistent memory for User A
 │   └── user_b.json           # Persistent memory for User B
@@ -129,6 +134,7 @@ Open **http://localhost:3000**
 |--------|------|-------------|
 | `GET` | `/api/users` | List all users |
 | `POST` | `/api/message` | Send a message to a user's Chief |
+| `POST` | `/api/upload` | Upload an image (`.jpg`/`.png`), returns local URL |
 | `GET` | `/api/logs` | SSE stream of real-time specialist logs |
 | `GET` | `/api/history/:userId` | Get chat history for a date (`?date=YYYY-MM-DD`) |
 | `GET` | `/api/history/:userId/dates` | List all dates with history (latest first) |
@@ -139,8 +145,22 @@ Open **http://localhost:3000**
 {
   "userId": "user_a",
   "message": "ทำรูปโปรโมทกาแฟ ธีมมินิมอล สีน้ำตาล",
-  "imageUrl": "https://..."
+  "imageUrl": "/uploads/1234567890_photo.jpg"
 }
+```
+
+### POST /api/upload
+
+```json
+{
+  "filename": "photo.jpg",
+  "data": "data:image/jpeg;base64,..."
+}
+```
+
+Response:
+```json
+{ "url": "/uploads/1234567890_photo.jpg" }
 ```
 
 Response:
@@ -167,6 +187,14 @@ Response:
 | WRITER | `เขียนแคปชั่น Instagram สำหรับร้านกาแฟ 3 แบบ` |
 | RESEARCHER→WRITER | `หาข้อมูลเทรนด์กาแฟปี 2025 แล้วเขียนบทความ Facebook` |
 | ADMIN | `จำไว้ด้วยว่าฉันชอบโทนสีน้ำตาล สไตล์มินิมอล` |
+
+**With image attached:**
+
+| Specialist | Prompt |
+|---|---|
+| WRITER | `please review the attached image and write a proper caption` |
+| DESIGNER | `please review the attached image and design a similar image with blue tone` |
+| RESEARCHER | `please review the attached image and research for it` |
 
 ---
 

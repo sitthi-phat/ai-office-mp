@@ -2,6 +2,7 @@ import express from 'express'
 import dotenv from 'dotenv'
 import { fileURLToPath } from 'url'
 import path from 'path'
+import fs from 'fs'
 import { USERS } from './config/users.js'
 import { enqueue } from './dispatcher.js'
 import { logEmitter } from './utils/logEmitter.js'
@@ -12,6 +13,23 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const app = express()
 app.use(express.json())
 app.use(express.static(path.join(__dirname, 'public')))
+
+const UPLOADS_DIR = path.join(__dirname, 'public', 'uploads')
+fs.mkdirSync(UPLOADS_DIR, { recursive: true })
+
+// POST /api/upload — accepts { filename, data: base64DataURL }
+app.post('/api/upload', (req, res) => {
+  const { filename, data } = req.body
+  const ext = path.extname(filename).toLowerCase()
+  if (!['.jpg', '.jpeg', '.png'].includes(ext)) {
+    return res.status(400).json({ error: 'Only .jpg and .png allowed' })
+  }
+  const ts       = Date.now()
+  const safeName = `${ts}_${filename.replace(/[^a-zA-Z0-9._-]/g, '_')}`
+  const buffer   = Buffer.from(data.replace(/^data:image\/\w+;base64,/, ''), 'base64')
+  fs.writeFileSync(path.join(UPLOADS_DIR, safeName), buffer)
+  res.json({ url: `/uploads/${safeName}` })
+})
 
 // GET /api/users
 app.get('/api/users', (_req, res) => {

@@ -3,6 +3,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import { resolveImageSource } from '../utils/imageHelper.js'
 
 const openai    = new OpenAI()
 const anthropic = new Anthropic()
@@ -53,13 +54,14 @@ export async function generateImages(instruction) {
 }
 
 export async function analyzeImage(imageUrl, instruction) {
+  const source = resolveImageSource(imageUrl)
   const response = await anthropic.messages.create({
     model:      'claude-sonnet-4-20250514',
     max_tokens: 1000,
     messages: [{
       role:    'user',
       content: [
-        { type: 'image', source: { type: 'url', url: imageUrl } },
+        { type: 'image', source },
         { type: 'text',  text: instruction }
       ]
     }]
